@@ -43,6 +43,52 @@ if (!ORDERS_TABLE_NAME || !REPORTS_TABLE_NAME || !EVENT_BUS_NAME) {
 // Convert backfill configs to full vendor objects
 const ACTIVE_VENDORS: Vendor[] = BACKFILL_VENDORS.map(createVendorFromBackfillConfig);
 
+// Helper functions
+function getIssueDescription(status: OrderStatus, giftType: string): string {
+  const descriptions = {
+    LOST: `${giftType} package lost in transit`,
+    DAMAGED: `${giftType} package damaged during shipping`,
+    UNDELIVERABLE: `${giftType} delivery failed - address issue`,
+    RETURN_TO_SENDER: `${giftType} returned to sender`
+  };
+  return descriptions[status as keyof typeof descriptions] || `Issue with ${giftType} order`;
+}
+
+function getUpdateType(order: Order): string {
+  if (order.isBackfilled) return 'new_order';
+  if (order.actualDelivery) return 'delivery_update';
+  if (['LOST', 'DAMAGED', 'UNDELIVERABLE', 'RETURN_TO_SENDER'].includes(order.status)) {
+    return 'issue_reported';
+  }
+  return 'status_change';
+}
+
+function getUpdateDescription(order: Order): string {
+  const vendor = ACTIVE_VENDORS.find(v => v.vendorId === order.vendorId);
+  const vendorName = vendor?.name || 'Unknown Vendor';
+  
+  switch (order.status) {
+    case 'PLACED':
+      return `New ${order.giftType} order placed with ${vendorName}`;
+    case 'SHIPPING_ON_TIME':
+      return `${order.giftType} order shipped on time by ${vendorName}`;
+    case 'SHIPPING_DELAYED':
+      return `${order.giftType} order delayed by ${vendorName}`;
+    case 'ARRIVED':
+      return `${order.giftType} order delivered by ${vendorName}`;
+    case 'LOST':
+      return `${order.giftType} order lost in transit from ${vendorName}`;
+    case 'DAMAGED':
+      return `${order.giftType} order damaged during shipping from ${vendorName}`;
+    case 'UNDELIVERABLE':
+      return `${order.giftType} order undeliverable from ${vendorName}`;
+    case 'RETURN_TO_SENDER':
+      return `${order.giftType} order returned to ${vendorName}`;
+    default:
+      return `${order.giftType} order status updated by ${vendorName}`;
+  }
+}
+
 const app = express();
 
 // Middleware for request logging and correlation IDs
@@ -221,37 +267,160 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Get all orders
+// Get all orders with filtering and pagination
 app.get('/api/orders', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 100;
-    const status = req.query.status as OrderStatus;
+    const {
+      vendorId,
+      status,
+      dateFrom,
+      dateTo,
+      limit = '50',
+      cursor
+    } = req.query;
     
-    let scanParams: any = {
-      TableName: ORDERS_TABLE_NAME,
-      Limit: limit
-    };
+    const limitNum = Math.min(parseInt(limit as string) || 50, 100);
     
-    // Add status filter if provided
-    if (status) {
-      scanParams.FilterExpression = '#status = :status';
-      scanParams.ExpressionAttributeNames = { '#status': 'status' };
-      scanParams.ExpressionAttributeValues = { ':status': status };
+    let result;
+    let orders: Order[];
+    
+    if (vendorId) {
+      // Use vendor index for vendor-specific queries
+      const queryParams: any = {
+        TableName: ORDERS_TABLE_NAME,
+        IndexName: 'vendorIndex',
+        KeyConditionExpression: 'vendorId = :vendorId',
+        ExpressionAttributeValues: {
+          ':vendorId': vendorId
+        },
+        Limit: limitNum,
+        ScanIndexForward: false // Most recent first
+      };
+      
+      // Add date range filter if provided
+      if (dateFrom || dateTo) {
+        if (dateFrom && dateTo) {
+          queryParams.KeyConditionExpression += ' AND createdAt BETWEEN :dateFrom AND :dateTo';
+          queryParams.ExpressionAttributeValues[':dateFrom'] = dateFrom;
+          queryParams.ExpressionAttributeValues[':dateTo'] = dateTo;
+        } else if (dateFrom) {
+          queryParams.KeyConditionExpression += ' AND createdAt >= :dateFrom';
+          queryParams.ExpressionAttributeValues[':dateFrom'] = dateFrom;
+        } else if (dateTo) {
+          queryParams.KeyConditionExpression += ' AND createdAt <= :dateTo';
+          queryParams.ExpressionAttributeValues[':dateTo'] = dateTo;
+        }
+      }
+      
+      // Add status filter
+      if (status) {
+        queryParams.FilterExpression = '#status = :status';
+        queryParams.ExpressionAttributeNames = { '#status': 'status' };
+        queryParams.ExpressionAttributeValues[':status'] = status;
+      }
+      
+      // Add cursor for pagination
+      if (cursor) {
+        try {
+          queryParams.ExclusiveStartKey = JSON.parse(Buffer.from(cursor as string, 'base64').toString());
+        } catch (e) {
+          return res.status(400).json(createApiError('INVALID_CURSOR', 'Invalid pagination cursor', req.correlationId || 'unknown'));
+        }
+      }
+      
+      result = await docClient.send(new QueryCommand(queryParams));
+    } else {
+      // Use scan for general queries
+      const scanParams: any = {
+        TableName: ORDERS_TABLE_NAME,
+        Limit: limitNum
+      };
+      
+      const filterExpressions: string[] = [];
+      const expressionAttributeNames: any = {};
+      const expressionAttributeValues: any = {};
+      
+      // Add status filter
+      if (status) {
+        filterExpressions.push('#status = :status');
+        expressionAttributeNames['#status'] = 'status';
+        expressionAttributeValues[':status'] = status;
+      }
+      
+      // Add date range filters
+      if (dateFrom) {
+        filterExpressions.push('createdAt >= :dateFrom');
+        expressionAttributeValues[':dateFrom'] = dateFrom;
+      }
+      
+      if (dateTo) {
+        filterExpressions.push('createdAt <= :dateTo');
+        expressionAttributeValues[':dateTo'] = dateTo;
+      }
+      
+      if (filterExpressions.length > 0) {
+        scanParams.FilterExpression = filterExpressions.join(' AND ');
+        scanParams.ExpressionAttributeNames = expressionAttributeNames;
+        scanParams.ExpressionAttributeValues = expressionAttributeValues;
+      }
+      
+      // Add cursor for pagination
+      if (cursor) {
+        try {
+          scanParams.ExclusiveStartKey = JSON.parse(Buffer.from(cursor as string, 'base64').toString());
+        } catch (e) {
+          return res.status(400).json(createApiError('INVALID_CURSOR', 'Invalid pagination cursor', req.correlationId || 'unknown'));
+        }
+      }
+      
+      result = await docClient.send(new ScanCommand(scanParams));
     }
     
-    const result = await docClient.send(new ScanCommand(scanParams));
-    const orders = (result.Items || []) as Order[];
+    orders = (result.Items || []) as Order[];
+    
+    // Sort by updatedAt descending if not using vendor index
+    if (!vendorId) {
+      orders.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }
+    
+    // Calculate status breakdown
+    const statusBreakdown = orders.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1;
+      return acc;
+    }, {} as Record<OrderStatus, number>);
+    
+    // Create next cursor if there are more results
+    let nextCursor: string | undefined;
+    if (result.LastEvaluatedKey) {
+      nextCursor = Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64');
+    }
+    
+    const response = {
+      orders,
+      nextCursor,
+      hasMore: !!result.LastEvaluatedKey,
+      summary: {
+        total: orders.length,
+        statusBreakdown
+      }
+    };
     
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       correlationId: req.correlationId,
       event: 'orders_retrieved',
       orderCount: orders.length,
-      statusFilter: status || 'all',
-      limit
+      filters: {
+        vendorId: vendorId || null,
+        status: status || null,
+        dateFrom: dateFrom || null,
+        dateTo: dateTo || null
+      },
+      limit: limitNum,
+      hasMore: !!result.LastEvaluatedKey
     }));
     
-    res.json(orders);
+    res.json(response);
   } catch (error) {
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
@@ -348,7 +517,10 @@ app.get('/api/dashboard', async (req, res) => {
       }
     }));
     
-    const reports = (reportsResult.Items || []) as VendorReport[];
+    const allReports = (reportsResult.Items || []) as VendorReport[];
+    
+    // Filter out dashboard summary reports - only process vendor reports
+    const reports = allReports.filter(report => report.vendorId !== 'SYSTEM');
     
     // Calculate current metrics from reports
     let totalReliability = 0;
@@ -433,6 +605,205 @@ app.get('/api/dashboard', async (req, res) => {
     
     res.status(500).json(createApiError('DASHBOARD_ERROR', 'Failed to retrieve dashboard summary', req.correlationId || 'unknown'));
   }
+});
+
+// Get vendor detail report
+app.get('/api/vendors/:vendorId/report', async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const { date = new Date().toISOString().split('T')[0] } = req.query;
+    
+    // Get vendor info
+    const vendor = ACTIVE_VENDORS.find(v => v.vendorId === vendorId);
+    if (!vendor) {
+      return res.status(404).json(createApiError('VENDOR_NOT_FOUND', 'Vendor not found', req.correlationId || 'unknown'));
+    }
+    
+    // Get vendor report
+    const reportResult = await docClient.send(new QueryCommand({
+      TableName: REPORTS_TABLE_NAME,
+      KeyConditionExpression: 'vendorId = :vendorId AND #date = :date',
+      ExpressionAttributeNames: {
+        '#date': 'date'
+      },
+      ExpressionAttributeValues: {
+        ':vendorId': vendorId,
+        ':date': date as string
+      }
+    }));
+    
+    const report = reportResult.Items?.[0] as VendorReport;
+    if (!report) {
+      return res.status(404).json(createApiError('REPORT_NOT_FOUND', 'Report not found for this vendor and date', req.correlationId || 'unknown'));
+    }
+    
+    // Get recent issues (orders with problem statuses in last 24 hours)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const issuesResult = await docClient.send(new QueryCommand({
+      TableName: ORDERS_TABLE_NAME,
+      IndexName: 'vendorIndex',
+      KeyConditionExpression: 'vendorId = :vendorId AND createdAt >= :yesterday',
+      FilterExpression: '#status IN (:lost, :damaged, :undeliverable, :rts)',
+      ExpressionAttributeNames: {
+        '#status': 'status'
+      },
+      ExpressionAttributeValues: {
+        ':vendorId': vendorId,
+        ':yesterday': yesterday.toISOString(),
+        ':lost': 'LOST',
+        ':damaged': 'DAMAGED',
+        ':undeliverable': 'UNDELIVERABLE',
+        ':rts': 'RETURN_TO_SENDER'
+      },
+      ScanIndexForward: false,
+      Limit: 10
+    }));
+    
+    const recentIssues = (issuesResult.Items as Order[]).map(order => ({
+      orderId: order.orderId,
+      status: order.status,
+      occurredAt: order.updatedAt,
+      description: getIssueDescription(order.status, order.giftType)
+    }));
+    
+    const response = {
+      vendor: {
+        vendorId: vendor.vendorId,
+        name: vendor.name,
+        category: vendor.category
+      },
+      report,
+      recentIssues
+    };
+    
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId,
+      event: 'vendor_report_retrieved',
+      vendorId,
+      date,
+      issueCount: recentIssues.length
+    }));
+    
+    res.json(response);
+  } catch (error) {
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId,
+      event: 'vendor_report_error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    }));
+    
+    res.status(500).json(createApiError('VENDOR_REPORT_ERROR', 'Failed to retrieve vendor report', req.correlationId || 'unknown'));
+  }
+});
+
+// Get recent order updates
+app.get('/api/orders/recent', async (req, res) => {
+  try {
+    const { limit = 50, hours = 24 } = req.query;
+    const limitNum = Math.min(parseInt(limit as string) || 50, 100);
+    const hoursNum = Math.min(parseInt(hours as string) || 24, 168);
+    
+    const cutoffTime = new Date();
+    cutoffTime.setHours(cutoffTime.getHours() - hoursNum);
+    
+    // Get recent orders using status index (most recently updated)
+    const recentResult = await docClient.send(new ScanCommand({
+      TableName: ORDERS_TABLE_NAME,
+      FilterExpression: 'updatedAt >= :cutoffTime',
+      ExpressionAttributeValues: {
+        ':cutoffTime': cutoffTime.toISOString()
+      },
+      Limit: limitNum
+    }));
+    
+    const orders = (recentResult.Items as Order[]).sort((a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+    
+    // Calculate activity metrics
+    const oneHourAgo = new Date();
+    oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+    
+    const lastHourOrders = orders.filter(order =>
+      new Date(order.updatedAt) >= oneHourAgo
+    );
+    
+    const recentActivity = {
+      updatesLastHour: lastHourOrders.length,
+      statusChanges: lastHourOrders.filter(order => !order.isBackfilled).length,
+      issuesReported: lastHourOrders.filter(order =>
+        ['LOST', 'DAMAGED', 'UNDELIVERABLE', 'RETURN_TO_SENDER'].includes(order.status)
+      ).length,
+      arrivalsConfirmed: lastHourOrders.filter(order => order.status === 'ARRIVED').length
+    };
+    
+    // Enhance orders with vendor names and update descriptions
+    const enhancedOrders = orders.map(order => {
+      const vendor = ACTIVE_VENDORS.find(v => v.vendorId === order.vendorId);
+      return {
+        ...order,
+        vendorName: vendor?.name || 'Unknown Vendor',
+        updateType: getUpdateType(order),
+        updateDescription: getUpdateDescription(order)
+      };
+    });
+    
+    // Calculate status breakdown
+    const statusBreakdown = orders.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const response = {
+      recentActivity,
+      orders: enhancedOrders,
+      hasMore: recentResult.LastEvaluatedKey !== undefined,
+      summary: {
+        totalRecentUpdates: orders.length,
+        timeRangeHours: hoursNum,
+        statusBreakdown,
+        updateTypeBreakdown: {
+          status_change: enhancedOrders.filter(o => o.updateType === 'status_change').length,
+          new_order: enhancedOrders.filter(o => o.updateType === 'new_order').length,
+          delivery_update: enhancedOrders.filter(o => o.updateType === 'delivery_update').length,
+          issue_reported: enhancedOrders.filter(o => o.updateType === 'issue_reported').length
+        }
+      }
+    };
+    
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId,
+      event: 'recent_orders_retrieved',
+      orderCount: orders.length,
+      timeRangeHours: hoursNum,
+      updatesLastHour: recentActivity.updatesLastHour
+    }));
+    
+    res.json(response);
+  } catch (error) {
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId,
+      event: 'recent_orders_error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    }));
+    
+    res.status(500).json(createApiError('RECENT_ORDERS_ERROR', 'Failed to retrieve recent orders', req.correlationId || 'unknown'));
+  }
+});
+
+// Dashboard summary alias
+app.get('/dashboard/summary', async (req, res) => {
+  // Redirect to the existing dashboard endpoint
+  req.url = '/api/dashboard';
+  return app._router.handle(req, res);
 });
 
 // Handle preflight OPTIONS requests
