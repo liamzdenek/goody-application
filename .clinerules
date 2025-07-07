@@ -1,0 +1,47 @@
+# Goody Dashboard Project Intelligence
+
+## Project-Specific Patterns
+- **NX Monorepo**: All packages go in `packages/` directory with single `dist/` output
+- **Manual Refresh Pattern**: User-controlled data updates, no auto-refresh timers
+- **Hardcoded Vendor Strategy**: Backfill uses static vendor list, not dynamic data
+- **Simple Reliability**: (ARRIVED orders / total completed orders) * 100 - no complex weighting
+- **Data Retention**: 30-day orders, 6-month reports - implement as TTL in DynamoDB
+
+## Technical Constraints
+- **Router Choice**: TanStack Router explicitly chosen over React Router
+- **CSS Strategy**: CSS modules only, no Tailwind or frameworks
+- **AWS SDK**: Must be bundled, not marked as external
+- **Build Validation**: Always clean + rebuild + validate after config changes
+- **CloudWatch Logs**: Always "sleep 10 && [command]" when checking logs
+
+## User Experience Principles
+- **Dropbox Design**: Flat, transparent buttons with thick black borders
+- **Color Strategy**: Bold and vibrant colors mixed with pastels
+- **Manual Control**: Users control refresh timing
+- **No Authentication**: Demo app, auth completely out of scope
+
+## Implementation Order
+1. NX workspace + shared types package
+2. Backend Lambda functions + DynamoDB
+3. Frontend React dashboard
+4. CDK infrastructure deployment
+5. Data backfill with hardcoded vendors
+6. curl/AWS CLI testing scripts
+
+## Critical Dependencies
+- **Shared Types**: Frontend/backend cannot import from each other
+- **Environment Variables**: Pass AWS ARNs/locations to all services
+- **Health Checks**: Must validate all dependencies
+- **Structured Logging**: Include correlation IDs and debug info
+
+## Data Patterns
+- **Order Lifecycle**: PLACED → SHIPPING_ON_TIME/DELAYED → Terminal status
+- **Report Generation**: DynamoDB Stream triggers metric calculations
+- **Vendor Backfill**: 8-12 vendors with varied reliability (0.7-0.98)
+- **Historical Data**: 21-day backfill for meaningful trend analysis
+
+## Deployment Strategy
+- **Cloud-Native Only**: No local development, use actual AWS deployments
+- **CDK Compilation**: Compile outside CDK, import artifacts
+- **Testing Strategy**: curl + AWS CLI validation, no E2E testing
+- **Artifact Management**: Single dist directory with package subfolders
