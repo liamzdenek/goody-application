@@ -1,7 +1,7 @@
 # API Contracts
 
 ## Service: Dashboard API
-**Base URL**: `https://api.goody-dashboard.com` (will be actual API Gateway endpoint)
+**Base URL**: `https://6q0ywxpbhh.execute-api.us-west-2.amazonaws.com/prod`
 
 ## Authentication
 None required - demo application
@@ -224,7 +224,7 @@ interface Vendor {
 ## Dashboard Summary
 
 ### GET /dashboard/summary
-**Purpose**: Main dashboard overview data
+**Purpose**: Main dashboard overview data (alias for /api/dashboard)
 
 **Query Parameters**:
 ```typescript
@@ -265,6 +265,10 @@ interface Vendor {
 }
 ```
 
+### GET /api/dashboard
+**Purpose**: Main dashboard overview data (primary endpoint)
+**Response**: Same as /dashboard/summary
+
 ## Vendor Operations
 
 ### GET /vendors
@@ -302,7 +306,7 @@ interface Vendor {
 }
 ```
 
-### GET /vendors/{vendorId}/report
+### GET /api/vendors/{vendorId}/report
 **Purpose**: Detailed vendor performance report
 
 **Path Parameters**:
@@ -324,6 +328,8 @@ interface Vendor {
     category: string;
   };
   report: {
+    vendorId: string;
+    date: string;                        // YYYY-MM-DD
     current7d: {
       statusCounts: {
         PLACED: number;
@@ -365,7 +371,7 @@ interface Vendor {
 
 ## Order Operations
 
-### GET /orders
+### GET /api/orders
 **Purpose**: List orders with filtering and pagination
 
 **Query Parameters**:
@@ -373,10 +379,10 @@ interface Vendor {
 {
   vendorId?: string;
   status?: OrderStatus;
-  dateFrom?: string;   // YYYY-MM-DD
-  dateTo?: string;     // YYYY-MM-DD
+  startDate?: string;  // YYYY-MM-DD
+  endDate?: string;    // YYYY-MM-DD
   limit?: number;      // default 50, max 100
-  cursor?: string;     // for pagination
+  cursor?: string;     // base64-encoded pagination cursor
 }
 ```
 
@@ -398,23 +404,23 @@ interface Vendor {
     deliveryDays?: number;
     isBackfilled?: boolean;
   }>;
-  nextCursor?: string;
+  nextCursor?: string;               // base64-encoded cursor for next page
   hasMore: boolean;
   summary: {
-    total: number;
+    total: number;                   // Count of orders in current page
     statusBreakdown: Record<OrderStatus, number>;
   };
 }
 ```
 
-### GET /orders/recent
+### GET /api/orders/recent
 **Purpose**: Get most recently updated orders across all vendors
 
 **Query Parameters**:
 ```typescript
 {
   limit?: number;      // default 50, max 100
-  cursor?: string;     // for pagination
+  cursor?: string;     // base64-encoded pagination cursor
   hours?: number;      // default 24, max 168 (7 days) - filter by hours since update
 }
 ```
@@ -431,7 +437,7 @@ interface Vendor {
   orders: Array<{
     orderId: string;
     vendorId: string;
-    vendorName: string;              // Denormalized for display
+    vendorName?: string;             // Denormalized for display (if available)
     status: OrderStatus;
     previousStatus?: OrderStatus;    // If status changed, show previous
     createdAt: string;
@@ -447,7 +453,7 @@ interface Vendor {
     updateType: 'status_change' | 'new_order' | 'delivery_update' | 'issue_reported';
     updateDescription?: string;      // Human-readable update description
   }>;
-  nextCursor?: string;
+  nextCursor?: string;               // base64-encoded cursor for next page
   hasMore: boolean;
   summary: {
     totalRecentUpdates: number;

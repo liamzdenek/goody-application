@@ -72,9 +72,10 @@
 ## Incremental Testing Plan
 1. ✅ **Data Backfill**: Test Lambda function to populate historical data (3,084 orders generated)
 2. ✅ **Report Generator**: Validate DynamoDB Stream-triggered reporting (5 vendor reports auto-generated)
-3. **API Health Check**: Validate main API endpoints are responding
-4. **Order Simulator**: Test EventBridge-triggered order generation
-5. **End-to-End Flow**: Complete order lifecycle with metrics
+3. ✅ **API Implementation**: All missing endpoints implemented and validated
+4. ✅ **Dashboard API Bug Fix**: Fixed TypeError in dashboard summary processing
+5. **Order Simulator**: Test EventBridge-triggered order generation
+6. **End-to-End Flow**: Complete order lifecycle with metrics
 
 ## Operational Learnings
 - **Lambda Performance**: Data backfill ~115ms execution, Report generator ~650ms
@@ -95,3 +96,13 @@
 - **Environment Variables**: Pass table names and EventBridge ARNs to all Lambda functions
 - **IAM Least Privilege**: CDK auto-generates appropriate permissions for each service
 - **Correlation IDs**: UUID-based tracking essential for debugging distributed operations
+
+## API Implementation Patterns
+- **Express Route Structure**: Organize endpoints by resource (/api/orders, /api/vendors, /dashboard)
+- **Pagination Strategy**: Base64-encoded JSON cursors for stateless pagination across DynamoDB
+- **Filtering Implementation**: Use GSI queries for vendor/status filters, avoid FilterExpression for performance
+- **Error Handling**: Consistent error responses with correlation IDs and structured logging
+- **CORS Headers**: Use shared CORS_HEADERS constant for consistent cross-origin support
+- **Activity Metrics**: Calculate recent activity from order update timestamps with configurable time windows
+- **Vendor Reports**: Combine vendor metadata with performance reports from separate DynamoDB queries
+- **Dashboard Summary**: Filter SYSTEM reports from vendor processing to prevent undefined access errors

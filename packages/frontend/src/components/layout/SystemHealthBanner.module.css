@@ -1,0 +1,109 @@
+.banner {
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #e9ecef;
+  font-weight: 500;
+}
+
+.content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  gap: 2rem;
+}
+
+.statusSection {
+  flex: 0 0 auto;
+}
+
+.freshnessSection {
+  flex: 1;
+  text-align: center;
+}
+
+.issuesSection {
+  flex: 0 0 auto;
+}
+
+.status {
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.freshness {
+  font-size: 0.9rem;
+}
+
+.issues {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Status-based colors */
+.healthy {
+  background-color: #d4edda;
+  color: #155724;
+  border-color: #c3e6cb;
+}
+
+.degraded {
+  background-color: #fff3cd;
+  color: #856404;
+  border-color: #ffeaa7;
+}
+
+.unhealthy {
+  background-color: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+}
+
+.loading {
+  background-color: #e2e3e5;
+  color: #495057;
+  border-color: #d6d8db;
+}
+
+.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+}
+
+/* Data freshness colors */
+.fresh {
+  color: #28a745;
+}
+
+.stale {
+  color: #ffc107;
+}
+
+.critical {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .banner {
+    padding: 1rem;
+  }
+  
+  .content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .freshnessSection {
+    text-align: left;
+  }
+  
+  .status,
+  .freshness,
+  .issues {
+    font-size: 0.85rem;
+  }
+}

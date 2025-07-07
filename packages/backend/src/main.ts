@@ -434,17 +434,134 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
-// Get all vendors
-app.get('/api/vendors', (req, res) => {
+// Get all vendors with performance metrics
+app.get('/api/vendors', async (req, res) => {
   try {
-    // Return the full vendor objects converted from backfill configs
-    const response: Vendor[] = ACTIVE_VENDORS;
+    const { date, limit = 20, sortBy = 'reliability', order = 'desc' } = req.query;
+    const targetDate = date ? String(date) : new Date().toISOString().split('T')[0];
+    
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId,
+      event: 'vendors_list_requested',
+      params: { date: targetDate, limit, sortBy, order }
+    }));
+
+    // Get performance reports for all vendors
+    const vendorSummaries = await Promise.all(
+      ACTIVE_VENDORS.map(async (vendor) => {
+        try {
+          // Get the latest report for this vendor
+          const reportResult = await docClient.send(new QueryCommand({
+            TableName: REPORTS_TABLE_NAME,
+            KeyConditionExpression: 'vendorId = :vendorId',
+            ExpressionAttributeValues: {
+              ':vendorId': vendor.vendorId
+            },
+            ScanIndexForward: false, // Get latest first
+            Limit: 1
+          }));
+
+          const report = reportResult.Items?.[0] as VendorReport | undefined;
+          
+          if (report) {
+            // Calculate risk level based on reliability
+            const reliability = report.current7d.reliabilityScore;
+            const riskLevel = reliability >= 85 ? 'low' : reliability >= 75 ? 'medium' : 'high';
+            
+            // Calculate trend direction
+            const reliabilityDelta = report.trends.reliabilityScoreDelta;
+            const trend = reliabilityDelta > 2 ? 'up' : reliabilityDelta < -2 ? 'down' : 'stable';
+
+            return {
+              vendorId: vendor.vendorId,
+              name: vendor.name,
+              category: vendor.category,
+              reliabilityScore: report.current7d.reliabilityScore,
+              totalOrders: report.current7d.totalOrders,
+              onTimePercentage: report.current7d.onTimePercentage,
+              issueCount: report.current7d.issueCount,
+              trend: trend as 'up' | 'down' | 'stable',
+              trendPercentage: reliabilityDelta,
+              riskLevel: riskLevel as 'low' | 'medium' | 'high'
+            };
+          } else {
+            // Fallback to base vendor data if no report exists
+            const baseReliability = Math.round(vendor.baseReliability * 100);
+            return {
+              vendorId: vendor.vendorId,
+              name: vendor.name,
+              category: vendor.category,
+              reliabilityScore: baseReliability,
+              totalOrders: 0,
+              onTimePercentage: baseReliability,
+              issueCount: 0,
+              trend: 'stable' as const,
+              trendPercentage: 0,
+              riskLevel: (baseReliability >= 85 ? 'low' : baseReliability >= 75 ? 'medium' : 'high') as 'low' | 'medium' | 'high'
+            };
+          }
+        } catch (error) {
+          console.error(`Error getting report for vendor ${vendor.vendorId}:`, error);
+          // Return fallback data
+          const baseReliability = Math.round(vendor.baseReliability * 100);
+          return {
+            vendorId: vendor.vendorId,
+            name: vendor.name,
+            category: vendor.category,
+            reliabilityScore: baseReliability,
+            totalOrders: 0,
+            onTimePercentage: baseReliability,
+            issueCount: 0,
+            trend: 'stable' as const,
+            trendPercentage: 0,
+            riskLevel: (baseReliability >= 85 ? 'low' : baseReliability >= 75 ? 'medium' : 'high') as 'low' | 'medium' | 'high'
+          };
+        }
+      })
+    );
+
+    // Sort vendors based on sortBy parameter
+    vendorSummaries.sort((a, b) => {
+      let aValue: number, bValue: number;
+      
+      switch (sortBy) {
+        case 'volume':
+          aValue = a.totalOrders;
+          bValue = b.totalOrders;
+          break;
+        case 'issues':
+          aValue = a.issueCount;
+          bValue = b.issueCount;
+          break;
+        case 'reliability':
+        default:
+          aValue = a.reliabilityScore;
+          bValue = b.reliabilityScore;
+          break;
+      }
+      
+      return order === 'asc' ? aValue - bValue : bValue - aValue;
+    });
+
+    // Apply limit
+    const limitNum = Math.min(parseInt(String(limit)), 100);
+    const paginatedVendors = vendorSummaries.slice(0, limitNum);
+
+    const response: VendorListResponse = {
+      vendors: paginatedVendors,
+      pagination: {
+        total: vendorSummaries.length,
+        hasMore: vendorSummaries.length > limitNum
+      }
+    };
     
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       correlationId: req.correlationId,
       event: 'vendors_retrieved',
-      vendorCount: ACTIVE_VENDORS.length
+      vendorCount: paginatedVendors.length,
+      totalVendors: vendorSummaries.length
     }));
     
     res.json(response);
