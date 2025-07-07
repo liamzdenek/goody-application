@@ -21,8 +21,8 @@
 - **No Authentication**: Demo app, auth completely out of scope
 
 ## Implementation Order
-1. NX workspace + shared types package
-2. Backend Lambda functions + DynamoDB
+1. ✅ NX workspace + shared types package
+2. ✅ Backend Lambda functions with Express API
 3. Frontend React dashboard
 4. CDK infrastructure deployment
 5. Data backfill with hardcoded vendors
@@ -39,6 +39,15 @@
 - **Report Generation**: DynamoDB Stream triggers metric calculations
 - **Vendor Backfill**: 8-12 vendors with varied reliability (0.7-0.98)
 - **Historical Data**: 21-day backfill for meaningful trend analysis
+
+## Backend Implementation Patterns
+- **API Structure**: Express with serverless-http wrapper for Lambda
+- **Type Safety**: Import all types from shared package, extend Express Request interface
+- **Error Handling**: Use createApiError from shared package with correlation IDs
+- **Mock Data**: Use correct enum values (ARRIVED not DELIVERED, 'tech' not 'GIFT_CARD')
+- **Correlation IDs**: UUID-based request tracking for debugging
+- **CORS Setup**: Use CORS_HEADERS from shared package for consistent headers
+- **Build Process**: Path mapping in tsconfig.base.json resolves workspace dependencies
 
 ## Deployment Strategy
 - **Cloud-Native Only**: No local development, use actual AWS deployments
