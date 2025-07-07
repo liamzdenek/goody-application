@@ -1,0 +1,58 @@
+{
+  "name": "infrastructure",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/infrastructure/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "platform": "node",
+        "outputPath": "dist/packages/infrastructure",
+        "format": ["cjs"],
+        "bundle": false,
+        "main": "packages/infrastructure/src/main.ts",
+        "tsConfig": "packages/infrastructure/tsconfig.app.json",
+        "assets": ["packages/infrastructure/src/assets"],
+        "generatePackageJson": true,
+        "esbuildOptions": {
+          "sourcemap": true,
+          "outExtension": {
+            ".js": ".js"
+          }
+        }
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "esbuildOptions": {
+            "sourcemap": false,
+            "outExtension": {
+              ".js": ".js"
+            }
+          }
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "dependsOn": ["build"],
+      "options": {
+        "buildTarget": "infrastructure:build",
+        "runBuildTargetDependencies": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "infrastructure:build:development"
+        },
+        "production": {
+          "buildTarget": "infrastructure:build:production"
+        }
+      }
+    }
+  }
+}
