@@ -157,7 +157,7 @@ app.get('/health', async (req, res) => {
     
     // Check data freshness
     let lastOrderUpdate: string | undefined;
-    let minutesSinceLastUpdate: number = 0;
+    let minutesSinceLastUpdate = 0;
     
     try {
       const recentOrdersResult = await docClient.send(new ScanCommand({
@@ -282,7 +282,6 @@ app.get('/api/orders', async (req, res) => {
     const limitNum = Math.min(parseInt(limit as string) || 50, 100);
     
     let result;
-    let orders: Order[];
     
     if (vendorId) {
       // Use vendor index for vendor-specific queries
@@ -376,7 +375,7 @@ app.get('/api/orders', async (req, res) => {
       result = await docClient.send(new ScanCommand(scanParams));
     }
     
-    orders = (result.Items || []) as Order[];
+    const orders = (result.Items || []) as Order[];
     
     // Sort by updatedAt descending if not using vendor index
     if (!vendorId) {
@@ -582,7 +581,7 @@ app.get('/api/reports', async (req, res) => {
   try {
     const vendorId = req.query.vendorId as string;
     
-    let queryParams: any = {
+    const queryParams: any = {
       TableName: REPORTS_TABLE_NAME
     };
     
@@ -639,6 +638,47 @@ app.get('/api/dashboard', async (req, res) => {
     // Filter out dashboard summary reports - only process vendor reports
     const reports = allReports.filter(report => report.vendorId !== 'SYSTEM');
     
+    // Calculate time since last update
+    let lastUpdateMinutesAgo = 0;
+    let mostRecentUpdateTime: string | null = null;
+    
+    // Find the most recent update time from reports
+    if (reports.length > 0) {
+      mostRecentUpdateTime = reports.reduce((latest, report) => {
+        return !latest || new Date(report.updatedAt) > new Date(latest) ? report.updatedAt : latest;
+      }, null as string | null);
+    }
+    
+    // Also check recent order updates to get the absolute most recent activity
+    try {
+      const recentOrdersResult = await docClient.send(new ScanCommand({
+        TableName: ORDERS_TABLE_NAME,
+        Select: 'SPECIFIC_ATTRIBUTES',
+        ProjectionExpression: 'updatedAt',
+        FilterExpression: 'updatedAt > :recentTime',
+        ExpressionAttributeValues: {
+          ':recentTime': new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // Last 2 hours
+        },
+        Limit: 1
+      }));
+      
+      if (recentOrdersResult.Items && recentOrdersResult.Items.length > 0) {
+        const mostRecentOrderUpdate = recentOrdersResult.Items[0].updatedAt as string;
+        if (!mostRecentUpdateTime || new Date(mostRecentOrderUpdate) > new Date(mostRecentUpdateTime)) {
+          mostRecentUpdateTime = mostRecentOrderUpdate;
+        }
+      }
+    } catch (error) {
+      console.log('Warning: Could not fetch recent order updates for dashboard freshness check:', error);
+    }
+    
+    // Calculate minutes since last update
+    if (mostRecentUpdateTime) {
+      lastUpdateMinutesAgo = Math.floor((Date.now() - new Date(mostRecentUpdateTime).getTime()) / (60 * 1000));
+    } else {
+      lastUpdateMinutesAgo = 999; // Indicate very stale data
+    }
+    
     // Calculate current metrics from reports
     let totalReliability = 0;
     let totalActiveOrders = 0;
@@ -677,12 +717,34 @@ app.get('/api/dashboard', async (req, res) => {
       atRiskVendors: Math.max(atRiskCount + 1, 0)
     };
     
+    // Determine data freshness based on actual update time
+    let dataFreshness: 'fresh' | 'stale';
+    let healthStatus: 'healthy' | 'degraded' | 'unhealthy';
+    const issues: string[] = [];
+    
+    if (reports.length === 0) {
+      dataFreshness = 'stale';
+      healthStatus = 'degraded';
+      issues.push('No recent vendor reports available');
+    } else if (lastUpdateMinutesAgo > 60) {
+      dataFreshness = 'stale';
+      healthStatus = 'degraded';
+      issues.push(`Data is ${lastUpdateMinutesAgo} minutes old`);
+    } else if (lastUpdateMinutesAgo > 30) {
+      dataFreshness = 'stale';
+      healthStatus = 'healthy';
+      issues.push(`Data freshness warning: ${lastUpdateMinutesAgo} minutes since last update`);
+    } else {
+      dataFreshness = 'fresh';
+      healthStatus = 'healthy';
+    }
+    
     const summary: DashboardSummaryResponse = {
       systemHealth: {
-        status: reports.length > 0 ? 'healthy' : 'degraded',
-        dataFreshness: reports.length > 0 ? 'fresh' : 'stale',
-        lastUpdateMinutesAgo: 5,
-        issues: reports.length === 0 ? ['No recent vendor reports available'] : []
+        status: healthStatus,
+        dataFreshness,
+        lastUpdateMinutesAgo,
+        issues
       },
       current: {
         overallReliability: Math.round(overallReliability * 10) / 10,

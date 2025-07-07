@@ -290,6 +290,7 @@
   font-weight: bold;
   text-transform: uppercase;
   border: 2px solid;
+  text-wrap: nowrap;
 }
 
 .updatenew_order {
