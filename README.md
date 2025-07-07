@@ -2,11 +2,6 @@
 
 A real-time dashboard providing visibility into vendor fulfillment performance for operations teams. Built with modern serverless architecture on AWS, this system generates realistic order lifecycle data and provides actionable insights on vendor reliability trends.
 
-## 🚀 Live Demo
-
-- **Dashboard**: https://d1fkw11r9my6ok.cloudfront.net
-- **API**: https://6q0ywxpbhh.execute-api.us-west-2.amazonaws.com/prod/
-
 ## 📊 System Overview
 
 The dashboard monitors vendor fulfillment performance across 5 different vendor types, processing over 3,000+ orders with 21-day historical backfill. The system maintains 79.8% overall reliability through automated monitoring and real-time reporting.
