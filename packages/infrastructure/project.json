@@ -1,58 +1,65 @@
 {
-  "name": "infrastructure",
+  "name": "cdk",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/infrastructure/src",
-  "projectType": "application",
+  "sourceRoot": "packages/cdk/src",
+  "projectType": "library",
   "tags": [],
   "targets": {
     "build": {
       "executor": "@nx/esbuild:esbuild",
       "outputs": ["{options.outputPath}"],
-      "defaultConfiguration": "production",
       "options": {
-        "platform": "node",
-        "outputPath": "dist/packages/infrastructure",
+        "outputPath": "dist/packages/cdk",
+        "main": "packages/cdk/src/index.ts",
+        "tsConfig": "packages/cdk/tsconfig.lib.json",
+        "assets": ["packages/cdk/*.md"],
         "format": ["cjs"],
-        "bundle": false,
-        "main": "packages/infrastructure/src/main.ts",
-        "tsConfig": "packages/infrastructure/tsconfig.app.json",
-        "assets": ["packages/infrastructure/src/assets"],
-        "generatePackageJson": true,
-        "esbuildOptions": {
-          "sourcemap": true,
-          "outExtension": {
-            ".js": ".js"
-          }
-        }
-      },
-      "configurations": {
-        "development": {},
-        "production": {
-          "esbuildOptions": {
-            "sourcemap": false,
-            "outExtension": {
-              ".js": ".js"
-            }
-          }
-        }
+        "generatePackageJson": true
       }
     },
-    "serve": {
-      "executor": "@nx/js:node",
-      "defaultConfiguration": "development",
-      "dependsOn": ["build"],
+    "bootstrap": {
+      "executor": "nx:run-commands",
       "options": {
-        "buildTarget": "infrastructure:build",
-        "runBuildTargetDependencies": false
+        "command": "cdk bootstrap",
+        "cwd": "packages/cdk"
       },
-      "configurations": {
-        "development": {
-          "buildTarget": "infrastructure:build:development"
+      "dependsOn": [
+        "build",
+        {
+          "projects": ["backend"],
+          "target": "build-with-dependencies"
         },
-        "production": {
-          "buildTarget": "infrastructure:build:production"
+        {
+          "projects": ["frontend"],
+          "target": "build"
         }
-      }
+      ]
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cdk deploy",
+        "cwd": "packages/cdk"
+      },
+      "dependsOn": [
+        "build",
+        {
+          "projects": ["backend"],
+          "target": "build-with-dependencies"
+        },
+        {
+          "projects": ["frontend"],
+          "target": "build"
+        }
+      ]
+    },
+    "destroy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cdk destroy",
+        "cwd": "packages/cdk"
+      },
+      "dependsOn": ["build"]
     }
   }
 }
