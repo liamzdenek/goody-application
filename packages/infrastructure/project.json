@@ -1,33 +1,28 @@
 {
-  "name": "cdk",
+  "name": "infrastructure",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/cdk/src",
+  "sourceRoot": "packages/infrastructure/src",
   "projectType": "library",
   "tags": [],
   "targets": {
     "build": {
-      "executor": "@nx/esbuild:esbuild",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "dist/packages/cdk",
-        "main": "packages/cdk/src/index.ts",
-        "tsConfig": "packages/cdk/tsconfig.lib.json",
-        "assets": ["packages/cdk/*.md"],
-        "format": ["cjs"],
-        "generatePackageJson": true
-      }
-    },
-    "bootstrap": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cdk bootstrap",
-        "cwd": "packages/cdk"
+        "command": "npm run build",
+        "cwd": "packages/infrastructure"
+      }
+    },
+    "synth": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run synth",
+        "cwd": "packages/infrastructure"
       },
       "dependsOn": [
         "build",
         {
           "projects": ["backend"],
-          "target": "build-with-dependencies"
+          "target": "build"
         },
         {
           "projects": ["frontend"],
@@ -35,17 +30,25 @@
         }
       ]
     },
+    "bootstrap": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cdk bootstrap --profile lz-demos",
+        "cwd": "packages/infrastructure"
+      },
+      "dependsOn": ["build"]
+    },
     "deploy": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cdk deploy",
-        "cwd": "packages/cdk"
+        "command": "cdk deploy --require-approval never --profile lz-demos",
+        "cwd": "packages/infrastructure"
       },
       "dependsOn": [
         "build",
         {
           "projects": ["backend"],
-          "target": "build-with-dependencies"
+          "target": "build"
         },
         {
           "projects": ["frontend"],
@@ -56,8 +59,8 @@
     "destroy": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cdk destroy",
-        "cwd": "packages/cdk"
+        "command": "cdk destroy --force",
+        "cwd": "packages/infrastructure"
       },
       "dependsOn": ["build"]
     }

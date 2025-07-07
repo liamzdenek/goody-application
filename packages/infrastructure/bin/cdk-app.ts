@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
-import { ZillowDashboardStack } from '../src/lib/zillow-dashboard-stack';
+import { GoodyDashboardStack } from '../src/lib/goody-dashboard-stack';
 
 const app = new cdk.App();
 
-new ZillowDashboardStack(app, 'ZillowDashboardStack', {
+new GoodyDashboardStack(app, 'GoodyDashboardStack', {
   env: {
     account: process.env['CDK_DEFAULT_ACCOUNT'],
-    region: process.env['CDK_DEFAULT_REGION'] || 'us-west-2'
+    region: process.env['CDK_DEFAULT_REGION'] || 'us-east-1'
   },
-  description: 'Zillow Real Estate Professional Health Dashboard'
+  description: 'Goody Third-Party Gift Fulfillment Health Dashboard'
 });
 
 app.synth();

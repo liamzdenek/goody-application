@@ -1,2 +1,2 @@
 export * from './lib/cdk';
-export * from './lib/zillow-dashboard-stack';
+export * from './lib/goody-dashboard-stack';
