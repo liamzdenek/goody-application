@@ -68,7 +68,25 @@ CloudFront + S3 → API Gateway → Lambda Functions → DynamoDB
 4. User navigates → TanStack Router handles client-side routing
 
 ### CDK Deployment Structure
-- **Frontend Stack**: S3 + CloudFront + Origin Access Identity
-- **Backend Stack**: API Gateway + Lambda functions + DynamoDB
-- **Shared Stack**: Common resources and IAM roles
-- **Environment Variables**: Passed from CDK to Lambda functions
+- **Single Stack Deployment**: GoodyDashboardStack with all resources
+- **NX Integration**: Automated dependency building with `npx nx deploy infrastructure`
+- **Resource Outputs**: All AWS resource names and URLs available as stack outputs
+- **Environment Variables**: Passed from CDK to Lambda functions via process.env
+
+### Deployed AWS Resources
+- **API Gateway**: https://6q0ywxpbhh.execute-api.us-west-2.amazonaws.com/prod/
+- **CloudFront Distribution**: https://d1fkw11r9my6ok.cloudfront.net
+- **DynamoDB Tables**:
+  - Orders: GoodyDashboardStack-GoodyOrders7B4321AE-1AW2E75YVYWG5
+  - Reports: GoodyDashboardStack-GoodyReports496FB776-1GN9M97BI6NDT
+- **Lambda Functions**:
+  - Data Backfill: GoodyDashboardStack-DataBackfillFunctionAB4732C3-wmgA86juPjmT
+  - Order Simulator: GoodyDashboardStack-OrderSimulatorFunctionE9E5293D-lnazX88QM6AF
+- **EventBridge Bus**: GoodyOrderEvents
+
+### NX Deployment Automation
+- **Command**: `npx nx deploy infrastructure`
+- **Dependency Chain**: shared:build → backend:build → frontend:build → infrastructure:build → infrastructure:deploy
+- **AWS Profile**: lz-demos
+- **Build Caching**: NX cached 3/5 tasks for efficient rebuilds
+- **Deployment Time**: ~8 minutes (468s for CloudFormation)

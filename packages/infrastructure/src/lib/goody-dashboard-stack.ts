@@ -72,12 +72,8 @@ export class GoodyDashboardStack extends cdk.Stack {
       sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING }
     });
 
-    // Add GSI for recent updates (for recent orders page)
-    ordersTable.addGlobalSecondaryIndex({
-      indexName: 'recentUpdatesIndex',
-      partitionKey: { name: 'isBackfilled', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING }
-    });
+    // Note: statusIndex above already provides status-based queries
+    // Additional GSI for recent updates can be added later if needed
 
     // Create the Reports table
     const reportsTable = new dynamodb.Table(this, 'GoodyReports', {
@@ -112,7 +108,7 @@ export class GoodyDashboardStack extends cdk.Stack {
     // Create the Order Simulator Lambda function
     const orderSimulatorFunction = new lambda.Function(this, 'OrderSimulatorFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'order-simulator.handler',
+      handler: 'packages/backend/src/order-simulator.handler',
       code: lambda.Code.fromAsset(BACKEND_PATH),
       environment: {
         ORDERS_TABLE_NAME: ordersTable.tableName,
@@ -125,7 +121,7 @@ export class GoodyDashboardStack extends cdk.Stack {
     // Create the Report Generator Lambda function
     const reportGeneratorFunction = new lambda.Function(this, 'ReportGeneratorFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'report-generator.handler',
+      handler: 'packages/backend/src/report-generator.handler',
       code: lambda.Code.fromAsset(BACKEND_PATH),
       environment: {
         ORDERS_TABLE_NAME: ordersTable.tableName,
@@ -138,7 +134,7 @@ export class GoodyDashboardStack extends cdk.Stack {
     // Create the Data Backfill Lambda function
     const dataBackfillFunction = new lambda.Function(this, 'DataBackfillFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'data-backfill.handler',
+      handler: 'packages/backend/src/data-backfill.handler',
       code: lambda.Code.fromAsset(BACKEND_PATH),
       environment: {
         ORDERS_TABLE_NAME: ordersTable.tableName

@@ -24,9 +24,10 @@
 1. ✅ NX workspace + shared types package
 2. ✅ Backend Lambda functions with Express API
 3. ✅ All data layer Lambda functions (order simulator, report generator, data backfill)
-4. 🎯 CDK infrastructure deployment (NEXT)
-5. Frontend React dashboard
-6. curl/AWS CLI testing scripts
+4. ✅ CDK infrastructure deployment (COMPLETE)
+5. ✅ Incremental testing and validation (DATA LAYER COMPLETE)
+6. Frontend React dashboard
+7. curl/AWS CLI testing scripts
 
 ## Critical Dependencies
 - **Shared Types**: Frontend/backend cannot import from each other
@@ -57,3 +58,40 @@
 - **CDK Compilation**: Compile outside CDK, import artifacts
 - **Testing Strategy**: curl + AWS CLI validation, no E2E testing
 - **Artifact Management**: Single dist directory with package subfolders
+
+## Successful Deployment Results
+- **API Gateway**: https://6q0ywxpbhh.execute-api.us-west-2.amazonaws.com/prod/
+- **CloudFront**: https://d1fkw11r9my6ok.cloudfront.net
+- **Data Backfill Function**: GoodyDashboardStack-DataBackfillFunctionAB4732C3-wmgA86juPjmT
+- **Order Simulator Function**: GoodyDashboardStack-OrderSimulatorFunctionE9E5293D-lnazX88QM6AF
+- **Orders Table**: GoodyDashboardStack-GoodyOrders7B4321AE-1AW2E75YVYWG5
+- **Reports Table**: GoodyDashboardStack-GoodyReports496FB776-1GN9M97BI6NDT
+- **EventBridge Bus**: GoodyOrderEvents
+- **Stack ARN**: arn:aws:cloudformation:us-west-2:129013835758:stack/GoodyDashboardStack/8573eb10-5b3b-11f0-8dc0-02723cabd28d
+
+## Incremental Testing Plan
+1. ✅ **Data Backfill**: Test Lambda function to populate historical data (3,084 orders generated)
+2. ✅ **Report Generator**: Validate DynamoDB Stream-triggered reporting (5 vendor reports auto-generated)
+3. **API Health Check**: Validate main API endpoints are responding
+4. **Order Simulator**: Test EventBridge-triggered order generation
+5. **End-to-End Flow**: Complete order lifecycle with metrics
+
+## Operational Learnings
+- **Lambda Performance**: Data backfill ~115ms execution, Report generator ~650ms
+- **Memory Usage**: 91MB for backfill, 237MB for report generation - well within limits
+- **DynamoDB Streams**: Near real-time processing, reports generated within seconds
+- **Event-Driven Architecture**: Complete workflow from data → streams → reports working perfectly
+- **Build Process**: NX dependency chain (shared → backend → infrastructure) works seamlessly
+- **CloudWatch**: Use "sleep 10 && aws logs filter-log-events" pattern for log checking
+- **Deployment Speed**: 35-45s for updates vs 8+ minutes for initial stack
+- **Data Validation**: Use DynamoDB scan with COUNT to verify record counts quickly
+- **Vendor Reliability**: Generated realistic 79.8% overall system reliability from vendor profiles
+
+## Infrastructure Patterns That Work
+- **esbuild Lambda Bundling**: Bundle workspace dependencies, include @goody/shared package
+- **CDK NodejsFunction**: Use individual handlers (*.handler) vs single entry point
+- **DynamoDB TTL**: Set on ttl attribute for automatic data retention (30d orders, 6mo reports)
+- **GSI Strategy**: vendorIndex and statusIndex cover all query patterns effectively
+- **Environment Variables**: Pass table names and EventBridge ARNs to all Lambda functions
+- **IAM Least Privilege**: CDK auto-generates appropriate permissions for each service
+- **Correlation IDs**: UUID-based tracking essential for debugging distributed operations

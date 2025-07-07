@@ -49,6 +49,14 @@
 - **Pre-compilation**: Compile outside of CDK, import artifacts
 - **Artifact Validation**: MUST clean, rebuild, and validate after config changes
 - **Dependency Management**: Fix conflicts instead of using --legacy-peer-deps
+- **NX Automation**: `npx nx deploy infrastructure` handles all dependency building automatically
+
+### Deployment Results
+- **Stack**: GoodyDashboardStack successfully deployed (42/42 resources)
+- **API Gateway**: https://6q0ywxpbhh.execute-api.us-west-2.amazonaws.com/prod/
+- **CloudFront**: https://d1fkw11r9my6ok.cloudfront.net
+- **Deployment Time**: 8 minutes with NX caching (3/5 tasks cached)
+- **AWS Profile**: lz-demos for all deployments
 
 ### Testing Strategy
 - **No E2E**: Playwright/similar testing out of scope
