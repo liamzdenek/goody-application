@@ -60,7 +60,8 @@ export type VendorReport = z.infer<typeof VendorReport>;
 
 // Dashboard Summary schema matching PLAN.md exactly
 export const DashboardSummary = z.object({
-  summaryId: z.string(),                  // Partition Key: "DAILY_SUMMARY"
+  vendorId: z.string(),                   // Partition Key: "SYSTEM" for dashboard data
+  summaryId: z.string(),                  // Identifier: "DAILY_SUMMARY"
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // Sort Key (YYYY-MM-DD)
   current7d: z.object({
     overallReliability: z.number().min(0).max(100),       // Weighted average across all vendors

@@ -264,6 +264,7 @@ async function generateDashboardSummary(correlationId: string): Promise<Dashboar
   const atRiskVendorsTrend = currentAtRiskVendors - previousAtRiskVendors;
   
   const summary: DashboardSummary = {
+    vendorId: 'SYSTEM',  // Special vendorId for system-wide dashboard data
     summaryId: 'DAILY_SUMMARY',
     date: new Date().toISOString().split('T')[0],
     current7d: {
